@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>Improviser</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no,minimum-scale=1.0, maximum-scale=1.0">
+  <link href="https://fonts.googleapis.com/css?family=Heebo:100,300,700,900" rel="stylesheet">
+  <script src="dist/three.js"></script>
+  <script src="dist/VRControls.js"></script>
+  <script src="dist/three.ar.js"></script>
+  <script src="https://hammerjs.github.io/dist/hammer.js"></script>
+  <script src="//d3js.org/d3.v4.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      position: fixed;
+      width: 100%;
+      height: 100vh;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    .title {
+      background-color: rgba(40, 40, 40, 0.4);
+      padding: 0.4em 0.6em;
+      border-radius: 0.1em;
+    }
+
+    .links {
+      background-color: rgba(40, 40, 40, 0.6);
+      padding: 0.4em 0.6em;
+      border-radius: 0.1em;
+    }
+
+    #info {
+      position: absolute;
+      /* left: 50%; */
+      bottom: 0;
+      /* transform: translate(-50%, 0); */
+      margin-bottom: 2.5%;
+      z-index: 10;
+      /* display: block; */
+      /* line-height: 2em; */
+      text-align: center;
+      width: 100%;
+    }
+    /* #info * { */
+    /* color: #fff;
+    } */
+
+    #keywordInput {
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      margin-bottom: 3%;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      /* border-bottom: solid 5px #8F0FFF; */
+      border-bottom: solid 1.5px #8F0FFF;
+      border-radius: 0%;
+      width: 84.5%;
+      height: 35px;
+      background: transparent;
+      color: #8F0FFF;
+      font-size: 1.25em;
+      font-family: 'Heebo', sans-serif;
+      outline: none;
+      font-weight: 900;
+    }
+
+    .btn-group button {
+      /* border-radius: 50%; */
+      border: none;
+      padding: 10px 24px;
+      margin-left: -5px;
+      /* Some padding */
+      /* float : left; */
+      width: 30%;
+      height: 40px;
+      background: #8F0FFF;
+      color: #fff;
+      font-size: 0.75em;
+      font-family: 'Heebo', sans-serif;
+      outline: none;
+      font-weight: 300;
+    }
+
+    #colorButton {
+      background: #CCC0D6;
+      color: #fff;
+    }
+
+    #saveButton {
+      background: #ffff;
+      color: #AA9CB7;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="info">
+    <input id="keywordInput"></input>
+    </br>
+    <div class="btn-group">
+      <button id="keywordButton" onclick="getPhrase()">Inspiration</button>
+      <button id="colorButton">Color</button>
+      <button id="saveButton">Save</button>
+
+      <!-- <button id="changeFont">change font</button> -->
+    </div>
+    <script>
+      // Fork from WebARonARKit
+      // https://github.com/google-ar/WebARonARKit
+
+      // For AR scene setting
+      var vrDisplay;
+      var vrFrameData;
+      var vrControls;
+      var arView;
+      var canvas;
+      var camera;
+      var scene;
+      var renderer;
+
+      // For phrase data
+      var rawData;
+      var selectedPhrase, matchedPhrases;
+
+      // For pre-setting for a textMesh
+      var group, textMesh1, textGeo, materials;
+      var text;
+      var size = 0.01,
+        height = size * 0.3,
+        hover = 0,
+        curveSegments = 12,
+        bevelThickness = size * 0.1,
+        bevelSize = size * 0.02,
+        bevelSegments = 0,
+        bevelEnabled = true,
+        font = undefined,
+        fontName = "Baskerville_Bold";
+
+      // var fontMap = {
+      //   "helvetiker_bold": 0,
+      //   "helvetiker_regular": 1,
+      //   "Bebas_regular": 2,
+      //   "Libertine_bold": 3,
+      //   "Roboto_black": 4,
+      //   "JennaSue_regular": 5
+      // };
+
+
+      var reverseFontMap = [];
+      // for (var i in fontMap) reverseFontMap[fontMap[i]] = i;
+      var targetRotation = 0;
+      var targetRotationOnMouseDown = 0;
+      var targetYpos = 0;
+      var mouseX = 0;
+      var mouseY = 0;
+      var mouseXOnMouseDown = 0;
+      var mouseYOnMouseDown = 0;
+      var windowHalfX = window.innerWidth / 2;
+      var windowHalfY = window.innerHeight / 2;
+      var fontIndex = 1;
+
+
+      var pointLight;
+      var dirLight;
+
+
+      THREE.ARUtils.getARDisplay().then(function(display) {
+        if (display) {
+          vrFrameData = new VRFrameData();
+          vrDisplay = display;
+          init();
+        } else {
+          THREE.ARUtils.displayUnsupportedMessage();
+        }
+      });
+
+      function init() {
+
+        // Turn on the debugging panel
+        var arDebug = new THREE.ARDebug(vrDisplay);
+        document.body.appendChild(arDebug.getElement());
+
+        // Setup the three.js rendering environment
+        renderer = new THREE.WebGLRenderer({
+          alpha: true
+        });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        console.log('setRenderer size', window.innerWidth, window.innerHeight);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.autoClear = false;
+        canvas = renderer.domElement;
+        document.body.appendChild(canvas);
+        scene = new THREE.Scene();
+        arView = new THREE.ARView(vrDisplay, renderer);
+        camera = new THREE.ARPerspectiveCamera(
+          vrDisplay,
+          60,
+          window.innerWidth / window.innerHeight,
+          vrDisplay.depthNear,
+          vrDisplay.depthFar
+        );
+
+        vrControls = new THREE.VRControls(camera);
+
+        // Bind our event handlers
+        window.addEventListener('resize', onWindowResize, false);
+        // canvas.addEventListener('touchstart', onClick, false);
+
+        // Kick off the render loop!
+        update();
+      }
+
+      function update() {
+        renderer.clearColor();
+        arView.render();
+        camera.updateProjectionMatrix();
+        vrDisplay.getFrameData(vrFrameData);
+        vrControls.update();
+        renderer.clearDepth();
+        renderer.render(scene, camera);
+        vrDisplay.requestAnimationFrame(update);
+
+        if (textMesh1) {
+          textMesh1.rotation.y += (targetRotationX - textMesh1.rotation.y) * 0.5;
+          textMesh1.rotation.x += (targetRotationY - textMesh1.rotation.x) * 0.5;
+          textMesh1.scale.x = newScale
+          textMesh1.scale.y = newScale
+          textMesh1.scale.z = newScale
+        }
+      }
+
+
+      function onWindowResize() {
+        console.log('setRenderer size', window.innerWidth, window.innerHeight);
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      d3.queue()
+        .defer(d3.csv, 'finalPhraseData_moreThanOne.csv')
+        .await(function(err, data) {
+          rawData = data;
+          // console.log(rawData)
+        });
+
+      function getPhrase() {
+
+        matchedPhrases = [];
+
+        var keywordValue = document.getElementById("keywordInput").value;
+        // console.log(keywordValue)
+        rawData.forEach(function(d) {
+          if (d.lyric.indexOf(keywordValue) != -1) {
+            matchedPhrases.push(d)
+          } else {
+            // console.log("no result")
+          }
+        })
+
+        selectedPhrase = matchedPhrases[Math.floor(Math.random() * matchedPhrases.length)]
+        text = selectedPhrase.lyric;
+        // text = text.replace(/^((\S+\s+){2}\S+)\s+/, '$1\n');
+        var textTemp = text.split(" ");
+        if (textTemp.length > 3 && textTemp.length <= 6) {
+          textTemp.splice(3, 0, '\n')
+          text = textTemp.join(" ")
+          text = " " + text;
+        } else if (textTemp.length > 6 && textTemp.length <= 9) {
+          textTemp.splice(3, 0, '\n')
+          textTemp.splice(7, 0, '\n')
+          text = textTemp.join(" ")
+          text = " " + text;
+        } else if (textTemp.length > 9 && textTemp.length <= 12) {
+          textTemp.splice(3, 0, '\n')
+          textTemp.splice(7, 0, '\n')
+          textTemp.splice(11, 0, '\n')
+          text = textTemp.join(" ")
+          text = " " + text;
+        }
+        console.log(text)
+        initText();
+      }
+
+      function initText() {
+
+        //reset
+        if (pointLight != undefined) scene.remove(pointLight);
+        if (dirLight != undefined) scene.remove(dirLight);
+        if (textMesh1 != undefined) scene.remove(textMesh1);
+
+        // create text
+
+        dirLight = new THREE.DirectionalLight(0xffffff, 0.125);
+        dirLight.position.set(0, 0, 1).normalize();
+        scene.add(dirLight);
+
+        pointLight = new THREE.PointLight(0xffffff, 1);
+        pointLight.position.set(0, 100, 90);
+        scene.add(pointLight);
+
+        materials = [
+          new THREE.MeshPhongMaterial({
+            flatShading: true,
+            opacity: 0,
+            transparent: true
+          }), // front
+          new THREE.MeshPhongMaterial({
+            flatShading: true,
+            opacity: 1,
+            transparent: true
+          }) // side
+        ];
+        materials[0].color.setHSL(Math.random(), 1, 1)
+        materials[1].color.setHSL(Math.random(), 0.7, 0.7)
+
+        var loader = new THREE.FontLoader();
+        loader.load('font/' + fontName + '.typeface.json', function(response) {
+          font = response;
+          if (!text) return;
+          createText();
+        });
+      }
+
+      function createText() {
+        textGeo = new THREE.TextGeometry(text, {
+          font: font,
+          size: size,
+          height: height,
+          curveSegments: curveSegments,
+          bevelThickness: bevelThickness,
+          bevelSize: bevelSize,
+          bevelEnabled: bevelEnabled
+        });
+        textGeo.center();
+        textGeo.computeBoundingBox();
+        textGeo.computeVertexNormals();
+        //
+        // if (!bevelEnabled) {
+        //   var triangleAreaHeuristics = 0.1 * (height * size);
+        //   for (var i = 0; i < textGeo.faces.length; i++) {
+        //     var face = textGeo.faces[i];
+        //     if (face.materialIndex == 1) {
+        //       for (var j = 0; j < face.vertexNormals.length; j++) {
+        //         face.vertexNormals[j].z = 0;
+        //         face.vertexNormals[j].normalize();
+        //       }
+        //       var va = textGeo.vertices[face.a];
+        //       var vb = textGeo.vertices[face.b];
+        //       var vc = textGeo.vertices[face.c];
+        //       var s = THREE.GeometryUtils.triangleArea(va, vb, vc);
+        //       if (s > triangleAreaHeuristics) {
+        //         for (var j = 0; j < face.vertexNormals.length; j++) {
+        //           face.vertexNormals[j].copy(face.normal);
+        //         }
+        //       }
+        //     }
+        //   }
+        // }
+        //
+        textMesh1 = new THREE.Mesh(textGeo, materials);
+        // textMesh1.position.x = 0;
+        // textMesh1.position.y = 0;
+        // textMesh1.position.z = -1000;
+        // textMesh1.rotation.x = 0;
+        // textMesh1.rotation.y = 0;
+        // textMesh1.rotation.y = 0;
+        showText();
+      }
+
+      // When clicking on the screen, create a text at the user's screen
+      function showText() {
+
+        var pose = vrFrameData.pose;
+        var ori = new THREE.Quaternion(
+          pose.orientation[0],
+          pose.orientation[1],
+          pose.orientation[2],
+          pose.orientation[3]
+        );
+        var pos = new THREE.Vector3(
+          pose.position[0],
+          pose.position[1],
+          pose.position[2]
+        );
+
+        var dirMtx = new THREE.Matrix4();
+        dirMtx.makeRotationFromQuaternion(ori);
+
+        var push = new THREE.Vector3(0, 0, -1.0);
+        var initScale = new THREE.Vector3(0.5, 0.5, 0.5);
+
+        push.transformDirection(dirMtx);
+        pos.addScaledVector(push, 0.125);
+
+        // console.log(pos)
+        // var centerOffset = -0.5 * (textGeo.boundingBox.max.x - textGeo.boundingBox.min.x);
+
+        scene.add(textMesh1);
+        textMesh1.position.copy(pos);
+        textMesh1.scale.copy(initScale);
+        textMesh1.quaternion.copy(ori);
+      }
+
+
+      var targetRotationX = 0;
+      var targetRotationOnMouseDownX = 0;
+      var targetRotationY = 0;
+      var targetRotationOnMouseDownY = 0;
+      var mouseX = 0;
+      var mouseY = 0;
+      var mouseXOnMouseDown = 0;
+      var mouseYOnMouseDown = 0;
+      var windowHalfX = window.innerWidth / 2;
+      var windowHalfY = window.innerHeight / 2;
+      var newScale = 1;
+      var lastScale = 1;
+      var hammertime = new Hammer(document, {
+        domEvents: true
+      });
+
+      hammertime.get('pinch').set({
+        enable: true
+      });
+
+      hammertime.on('pinch', function(e) {
+        newScale = Math.max(.1, Math.min(lastScale * (e.scale), 10));
+        console.log(newScale)
+      });
+
+      hammertime.on("pinchend", function(e) {
+        lastScale = newScale;
+      });
+
+      document.addEventListener('touchstart', onDocumentTouchStart, false);
+      document.addEventListener('touchmove', onDocumentTouchMove, false);
+
+      document.getElementById("colorButton").addEventListener('click', function() {
+        materials[0].color.setHSL(Math.random(), 1, 1)
+        materials[1].color.setHSL(Math.random(), 0.7, 0.7)
+      }, false);
+
+      document.getElementById("saveButton").addEventListener('click', getAllData, false);
+
+      function getAllData() {
+
+        var finalData = {};
+        var date, now, location;
+
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(function(position) {
+            // console.log(position.coords);
+            location = position.coords;
+            date = new Date();
+            now = Date.now();
+            finalData = {
+              phrase: text,
+              phraseInfo: selectedPhrase,
+              // weatherInfo : weatherInfo,
+              locationInfo: location,
+              timeInfo: {
+                date: date,
+                dateMS: now
+              }
+            }
+            console.log(finalData)
+          });
+        } else {
+          console.log("Geolocation is not supported by this browser.");
+        }
+      }
+
+      function onDocumentTouchStart(event) {
+        if (event.touches.length == 1) {
+          // event.preventDefault();
+          mouseXOnMouseDown = event.touches[0].pageX - windowHalfX;
+          mouseYOnMouseDown = event.touches[0].pageY - windowHalfY;
+          targetRotationOnMouseDownX = targetRotationX;
+          targetRotationOnMouseDownY = targetRotationY;
+        }
+      }
+
+      function onDocumentTouchMove(event) {
+        if (event.touches.length == 1) {
+          // event.preventDefault();
+          mouseX = event.touches[0].pageX - windowHalfX;
+          targetRotationX = targetRotationOnMouseDownX + (mouseX - mouseXOnMouseDown) * 0.01;
+          mouseY = event.touches[0].pageY - windowHalfY;
+          targetRotationY = targetRotationOnMouseDownY + (mouseY - mouseYOnMouseDown) * 0.01;
+        }
+      }
+      // document.getElementById("changeFont").addEventListener('click', function() {
+      //   fontIndex++;
+      //   fontName = reverseFontMap[fontIndex % reverseFontMap.length];
+      //   initText();
+      // }, false);
+    </script>
+</body>
+
+</html>
