@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<head>
+  <title></title>
+  <link href="https://fonts.googleapis.com/css?family=Oswald:300|Playfair+Display:900" rel="stylesheet">
+  <script src='https://api.mapbox.com/mapbox-gl-js/v0.44.1/mapbox-gl.js'></script>
+  <link href='https://api.mapbox.com/mapbox-gl-js/v0.44.1/mapbox-gl.css' rel='stylesheet' />
+  <script src="https://www.gstatic.com/firebasejs/4.12.1/firebase.js"></script>
+  <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+  <script src="//d3js.org/d3.v4.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #141414;
+    }
+
+    svg {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+    }
+
+    #menu {
+      position: fixed;
+      width: 5vw;
+      height: 100vh;
+      opacity: 1;
+      background: transparent;
+    }
+
+    #map {
+      position: fixed;
+      margin-left: 5vw;
+      width: 55vw;
+      height: 100vh;
+    }
+
+    .mapboxgl-canvas {
+      filter: grayscale(100%);
+    }
+
+    #features {
+      width: 40vw;
+      margin-left: 60vw;
+      font-family: sans-serif;
+      overflow-y: scroll;
+      background-color: #141414;
+    }
+
+    section {
+      line-height: 0px;
+      filter: grayscale(100%);
+      opacity: 0.5;
+      text-align: center;
+    }
+
+    section.active {
+      filter: grayscale(0%);
+      opacity: 1;
+    }
+
+    section:last-child {
+      border-bottom: none;
+      margin-bottom: 200px;
+    }
+
+    .featureImage {
+      display: block;
+      width: auto;
+      height: auto;
+      max-width: 100%;
+    }
+
+    button {
+      width: 4vw;
+      margin-left: 0.5vw;
+      height: 2.5vh;
+      margin-top: 2vh;
+      background-color: #141414;
+      color: #fff;
+      font-family: 'Oswald', sans-serif;
+      font-size: 0.6em;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      border-bottom: solid 1px #515151;
+      outline: none;
+    }
+
+    button.checked {
+      color: #B0E5C4;
+      border-bottom: solid 5px #B0E5C4;
+    }
+
+    #getButton {
+      height: 4vh;
+      background-color: #B0E5C4;
+      color: #141414;
+    }
+
+    #getButton:active {
+      background-color: #141414;
+      color: #B0E5C4;
+    }
+
+    #titleDiv {
+      text-align: center;
+    }
+
+    #title {
+      color: #B0E5C4;
+      font-family: 'Playfair Display', serif;
+      font-size: 3em;
+      margin-top: 40vh;
+    }
+
+    #titleBody {
+      font-family: 'Oswald', sans-serif;
+      font-size: em;
+      margin-top: 2vh;
+      color: #fff;
+    }
+
+    .tooltip {
+      text-align: justify;
+      position: absolute;
+      font-size: 1em;
+      pointer-events: none;
+      border: none;
+      border-radius: 0px;
+      font-family: 'Oswald', sans-serif;
+      color: #141414;
+      background: #F3DE8A;
+    }
+
+    .tooltip p {
+      margin: 0;
+      padding: 5px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id='menu'>
+    <button class="buttonOption" id='morning'>Morning</button>
+    <button class="buttonOption" id='afternoon'>Afternoon</button>
+    <button class="buttonOption" id='night'>Night</button>
+    <button class="buttonOption" id='sunny'>Sunny Days</button>
+    <button class="buttonOption" id='cloudy'>Cloudy Days</button>
+    <button class="buttonOption" id='rainy'>Rainy Days</button>
+    <button class="buttonOption" id='windy'>Windy Days</button>
+    <button id='getButton'>Falling into Reverie</button>
+  </div>
+  <div id='map'></div>
+  <div id='features'>
+    <div id='titleDiv'>
+      <h1 id="title">The World of Reverie</h1>
+      <p id="titleBody">The First edition at New York City with 18,153 phrases from lyrics inspired by NYC.</br>Phrases are recontextualized by Younho Lee during April 2018.</br>Please select time & weather to fall into his reverie</br>and scroll down to follow the journey.</h1>
+        <div>
+        </div>
+        <script>
+          //Firebase pre-setting
+          var config = {
+            apiKey: "AIzaSyBYA5u1rx6xTJhQSGUe7AS1PwOyy_uEaVk",
+            authDomain: "thesis-cc0ce.firebaseapp.com",
+            databaseURL: "https://thesis-cc0ce.firebaseio.com",
+            projectId: "thesis-cc0ce",
+            storageBucket: "gs://thesis-cc0ce.appspot.com/",
+            messagingSenderId: "409330673435"
+          };
+
+          firebase.initializeApp(config);
+          var ref = firebase.database().ref('improviser');
+
+          //Initial location for map
+          var initLng = -73.96859628805815;
+          var initLat = 40.78601945777891;
+
+
+          // button functions
+          $(".buttonOption").click(function() {
+            $(this).toggleClass('checked');
+          });
+
+          $("#getButton").click(function() {
+            var timeList = [];
+            var weatherList = [];
+            var checkedList = {
+              time: timeList,
+              weather: weatherList
+            };
+            if ($("#morning").hasClass('checked')) timeList.push("morning")
+            if ($("#afternoon").hasClass('checked')) timeList.push("afternoon")
+            if ($("#night").hasClass('checked')) timeList.push("night")
+            if ($("#sunny").hasClass('checked')) weatherList.push("sunny")
+            if ($("#cloudy").hasClass('checked')) weatherList.push("cloudy")
+            if ($("#rainy").hasClass('checked')) weatherList.push("rainy")
+            if ($("#windy").hasClass('checked')) weatherList.push("windy")
+            getData(checkedList)
+          });
+
+
+          function getData(filter) {
+            //Get data from firebase and arrage it into an array
+            var finalData = [];
+            ref.once('value').then(function(snapshot) {
+              var value = snapshot.val();
+              console.log(value)
+              var key = Object.keys(snapshot.val());
+              key.forEach(function(d) {
+
+                var content = value[d];
+                var date = new Date(content.timeInfo);
+                var hour = date.getHours();
+                var weather = content.weatherInfo.weather[0].main;
+                var wind = content.weatherInfo.wind.speed;
+
+                var timeCondition;
+                if (hour >= 5 && hour < 12) {
+                  timeCondition = "morning"
+                } else if (hour >= 12 && hour < 19) {
+                  timeCondition = "afternoon"
+                } else if (hour >= 19 && hour < 24) {
+                  timeCondition = "night"
+                }
+
+                var weatherCondition;
+                if (weather == "Clear") {
+                  weatherCondition = "sunny"
+                } else if (weather == "Clouds") {
+                  weatherCondition = "cloudy"
+                } else if (weather == "Rain") {
+                  weatherCondition = "rainy"
+                }
+
+                if (wind >= 5.5) {
+                  weatherCondition = "windy"
+                }
+
+                if (content.locationInfo.lng != undefined) {
+                  finalData.push({
+                    lat: content.locationInfo.lat,
+                    lng: content.locationInfo.lng,
+                    time: timeCondition,
+                    weather: weatherCondition,
+                    zoom: 18,
+                    data: content
+                  })
+                } else {
+                  finalData.push({
+                    lat: content.locationInfo.lat,
+                    lng: content.locationInfo.lon,
+                    time: timeCondition,
+                    weather: weatherCondition,
+                    zoom: 18,
+                    data: content
+                  })
+                }
+              })
+
+
+              // Filter data according to the filter selection
+              var filteredData = finalData.filter(x =>
+                Object.keys(filter).every(f =>
+                  filter[f].some(z => z == x[f])))
+              console.log(filteredData)
+              visualize(filteredData);
+            })
+          }
+
+          // Mapbox setting
+          mapboxgl.accessToken = 'pk.eyJ1IjoiaXVub2xlZSIsImEiOiJjajE1cGVuMWUwMTlqMnFvZDIwZjhoZ2xkIn0.c1QyfR5Y2WD9Vzflg4fcYA';
+          var map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/satellite-v9',
+            zoom: 12,
+            center: [initLng, initLat]
+          });
+
+          map.scrollZoom.disable();
+
+          // D3 setting
+          var container = map.getCanvasContainer();
+          var svg = d3.select(container).append("svg");
+
+          function visualize(data) {
+
+            // Init the feature section
+            $("#features").children().remove();
+
+            // rearrange data for scroll camera interaction
+            // var sectionData = [];
+            // sectionData.push({
+            //   lat: initLat,
+            //   lng: initLng,
+            //   zoom: 12,
+            //   data: {
+            //     timeInfo: 'intro'
+            //   }
+            // })
+
+            // data.forEach(function(d) {
+            //   sectionData.push(d)
+            // })
+
+            // Tooltip setting
+            var tooltip = d3.select("body").append("div")
+              .attr("class", "tooltip")
+              .style("opacity", 0);
+
+            var chapters = data.reduce(function(prev, curr) {
+              // console.log(prev)
+              // console.log(curr)
+              prev[curr.data.timeInfo] = {
+                center: [curr.lng, curr.lat],
+                speed: 0.5,
+                zoom: curr.zoom
+              };
+              return prev;
+            }, {});
+
+            // console.log(chapters);
+
+            // Add image to feature section
+            var section = d3.select("#features").selectAll("section")
+              .data(data).enter().append("section")
+              .attr("id", function(d) {
+                return d.data.timeInfo
+              })
+              .append("img")
+              .attr("class", "featureImage")
+              .attr("src", function(d) {
+                return "image/" + d.data.timeInfo + ".jpg"
+              })
+
+
+            // Mapping each data into map
+            var dots = svg.selectAll("dot")
+              .data(data)
+              .enter().append("circle").attr("class", "dot")
+              .attr("r", 3)
+              .style("fill", "#F3DE8A")
+              .style("fill-opacity", 0)
+              .on("mouseover", function(d, i) {
+
+                tooltip.transition()
+                  .duration(750)
+                  .style("opacity", 0.8)
+
+                d3.json("https://maps.googleapis.com/maps/api/geocode/json?latlng=" + d.lat + "," + d.lng + "&language=en&key=AIzaSyCC-oLtACq9IqRiPnDrSrJVx2m6Xj1zayk", function(location) {
+                  console.log(location)
+
+                  var address = location.results[2].formatted_address;
+
+                  tooltip.html("<p>" + "First word - <strong>" + d.data.selectedWord.first + "</strong> / Second word - <strong>" + d.data.selectedWord.second + "</strong></br>" + "Location - <strong>" + address + "</strong></br>" +
+                    "Time - <strong>" + new Date(d.data.timeInfo).toString().split("GMT")[0] + "</strong></br>" + "Weather - <strong>" + d.data.weatherInfo.weather[0].description + "</strong> / Temp: <strong>" +
+                    (9 / 5 * (d.data.weatherInfo.main.temp - 273) + 32).toFixed(1) + "</strong>(F) / Wind: <strong>" + d.data.weatherInfo.wind.speed + "</strong> m/s" + "</p>")
+                })
+
+                tooltip
+                  .style("left", (d3.event.pageX) + "px")
+                  .style("top", (d3.event.pageY) + "px")
+              })
+              .on("mouseout", function(d) {
+                tooltip.transition()
+                  .duration(250)
+                  .style("opacity", 0);
+              })
+
+            setTimeout(function() {
+              dots.transition().delay(function(d, i) {
+                  return i * 10
+                }).duration(1000)
+                .style("fill-opacity", 0.5)
+                .attr("r", 30)
+                .transition().duration(750)
+                .style("fill-opacity", 0.85)
+                .attr("r", 3)
+            }, 250)
+
+            var radiusRange = d3.scaleLinear().domain([12, 18]).range([3, 15]);
+
+            function render() {
+              dots
+                .attr("cx", function(d) {
+                  var x = project(d).x;
+                  return x;
+                })
+                .attr("cy", function(d) {
+                  var y = project(d).y;
+                  return y;
+                })
+                .attr("r", function(d) {
+                  return radiusRange(map.getZoom());
+                })
+            }
+
+            function project(d) {
+              return map.project(getLL(d));
+            }
+
+            function getLL(d) {
+              return new mapboxgl.LngLat(d.lng, d.lat)
+            }
+
+            map.on("viewreset", function() {
+              render()
+            });
+
+            map.on("move", function() {
+              render()
+            });
+            // render our initial visualization
+            render()
+
+
+            d3.select("#intro").attr("class", "active")
+            // Set scroll interaction
+            window.onscroll = function() {
+              var chapterNames = Object.keys(chapters);
+              for (var i = 0; i < chapterNames.length; i++) {
+                var chapterName = chapterNames[i];
+                if (isElementOnScreen(chapterName)) {
+                  setActiveChapter(chapterName);
+                  break;
+                }
+              }
+            };
+
+            var activeChapterName = 'intro';
+
+            function setActiveChapter(chapterName) {
+              if (chapterName === activeChapterName) return;
+
+              map.flyTo(chapters[chapterName]);
+
+              document.getElementById(chapterName).setAttribute('class', 'active');
+              if (document.getElementById(activeChapterName) != null)
+                document.getElementById(activeChapterName).setAttribute('class', '');
+
+              activeChapterName = chapterName;
+            }
+
+            function isElementOnScreen(id) {
+              var element = document.getElementById(id);
+              var bounds = element.getBoundingClientRect();
+              return bounds.top < window.innerHeight && bounds.bottom > 50;
+            }
+          }
+        </script>
+</body>
+
+</html>

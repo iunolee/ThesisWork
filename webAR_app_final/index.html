@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>Improviser</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no,minimum-scale=1.0, maximum-scale=1.0">
+  <link href="https://fonts.googleapis.com/css?family=Heebo:100,300,700,900" rel="stylesheet">
+  <script src="dist/three.js"></script>
+  <script src="dist/VRControls.js"></script>
+  <script src="dist/three.ar.js"></script>
+  <script src="dist/rita-full.min.js"></script>
+  <script src="https://hammerjs.github.io/dist/hammer.js"></script>
+  <script src="//d3js.org/d3.v4.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/4.12.1/firebase.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      position: fixed;
+      width: 100%;
+      height: 100vh;
+      -webkit-user-select: none;
+      user-select: none;
+      /* background: #3f3f3f; */
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    .title {
+      background-color: rgba(40, 40, 40, 0.4);
+      padding: 0.4em 0.6em;
+      border-radius: 0.1em;
+    }
+
+    .links {
+      background-color: rgba(40, 40, 40, 0.6);
+      padding: 0.4em 0.6em;
+      border-radius: 0.1em;
+    }
+
+    #info {
+      position: absolute;
+      bottom: 0;
+      margin-bottom: 2.5%;
+      z-index: 10;
+      text-align: center;
+      width: 100%;
+    }
+
+
+    .btn-group button {
+      padding: 7.5px;
+      margin-left: 43px;
+      margin-bottom: 5px;
+      float: left;
+      width: 40px;
+      height: 40px;
+      background: none;
+      border: 4px solid #fff;
+      color: #fff;
+      font-size: 0.75em;
+      font-family: 'Heebo', sans-serif;
+      outline: none;
+      font-weight: 900;
+    }
+
+    button:active {
+      background: #fff;
+      color: #141414;
+    }
+
+    #phraseWrapper {
+      display: none;
+      text-align: center;
+    }
+
+    #phraseBackground {
+      position: fixed;
+      left: 0;
+      top: 0;
+      background: #141414;
+      opacity: 0.4;
+      width: 100vw;
+      height: 89vh;
+    }
+
+    #firstChoice {
+      position: fixed;
+      top: 7.5vh;
+      left: 15vw;
+      border-radius: 0px;
+      border-bottom: 3px solid #fff;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      background: transparent;
+      font-family: 'Heebo', sans-serif;
+      font-size: 1.25em;
+      color: #fff;
+      width: 70vw;
+    }
+
+    #secondChoice {
+      position: fixed;
+      top: 20vh;
+      left: 15vw;
+      border-radius: 0px;
+      border-bottom: 3px solid #fff;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      background: transparent;
+      font-family: 'Heebo', sans-serif;
+      font-size: 1.25em;
+      color: #fff;
+      width: 70vw;
+    }
+
+    #getPhraseButton {
+      position: fixed;
+      top: 81vh;
+      left: 86vw;
+      padding: 5px;
+      width: 40px;
+      height: 40px;
+      background: #fff;
+      opacity: 0.8;
+      border: none;
+      color: #141414;
+      font-size: 0.75em;
+      font-family: 'Heebo', sans-serif;
+      outline: none;
+      font-weight: 900;
+    }
+
+    #getPhraseButton:active {
+      background: #141414;
+      color: #fff;
+    }
+
+    #selectedPhraseTemp {
+      margin-left: 15vw;
+      width: 70vw;
+      line-height: 1.2em;
+      margin-bottom: 40vh;
+      color: #fff;
+      font-size: 1.5em;
+      font-family: 'Heebo', sans-serif;
+      z-index: 1;
+      opacity: 1;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="info">
+    <div id="phraseWrapper">
+      <div id="phraseBackground"></div>
+      <select id="firstChoice">
+        <option id="firstChoiceIntro" value="" disabled selected>Select first word</option>
+      </select>
+      </br>
+      <select id="secondChoice">
+        <option id="secondChoiceIntro" value="" disabled selected>Select second word</option>
+      </select>
+      <h1 id="selectedPhraseTemp"></h1>
+      <button id="getPhraseButton">G</button>
+    </div>
+    <div class="btn-group">
+      <button id="keywordButton">I</button>
+      <button id="colorButton">C</button>
+      <button id="changeFont">F</button>
+      <button id="saveButton">S</button>
+    </div>
+    <script>
+      // Fork from WebARonARKit
+      // https://github.com/google-ar/WebARonARKit
+
+
+      //Firebase pre-setting
+      var config = {
+        apiKey: "AIzaSyBYA5u1rx6xTJhQSGUe7AS1PwOyy_uEaVk",
+        authDomain: "thesis-cc0ce.firebaseapp.com",
+        databaseURL: "https://thesis-cc0ce.firebaseio.com",
+        projectId: "thesis-cc0ce",
+        storageBucket: "gs://thesis-cc0ce.appspot.com/",
+        messagingSenderId: "409330673435"
+      };
+
+      firebase.initializeApp(config);
+
+      var finalSelectedData;
+      var firstChoiceWord;
+      var secondChoiceWord;
+
+      // For AR scene setting
+      var vrDisplay;
+      var vrFrameData;
+      var vrControls;
+      var arView;
+      var canvas;
+      var camera;
+      var scene;
+      var renderer;
+
+      // For pre-setting for a textMesh
+      var group, textMesh1, textGeo, materials;
+      var text;
+      var size = 0.01,
+        height = size * 0,
+        curveSegments = 8,
+        bevelThickness = size * 0.0,
+        bevelSize = size * 0.00,
+        bevelSegments = 0,
+        bevelEnabled = false,
+        font = undefined,
+        fontName = "chunkFiveRegular";
+
+      var fontMap = {
+        "chunkFiveRegular": 0,
+        "Bebas_regular": 1,
+        "cmb10": 2,
+        "Walkway": 3,
+        "DJB": 4,
+        "TrashHand": 5
+      };
+
+      var targetRotation = 0;
+      var targetRotationOnMouseDown = 0;
+      var targetYpos = 0;
+      var mouseX = 0;
+      var mouseY = 0;
+      var mouseXOnMouseDown = 0;
+      var mouseYOnMouseDown = 0;
+      var windowHalfX = window.innerWidth / 2;
+      var windowHalfY = window.innerHeight / 2;
+      var fontIndex = 0;
+      var reverseFontMap = [];
+      for (var i in fontMap) reverseFontMap[fontMap[i]] = i;
+
+      var ambientLight;
+
+      THREE.ARUtils.getARDisplay().then(function(display) {
+        if (display) {
+          vrFrameData = new VRFrameData();
+          vrDisplay = display;
+          init();
+        } else {
+          THREE.ARUtils.displayUnsupportedMessage();
+        }
+      });
+
+      function init() {
+
+        // Turn on the debugging panel
+        // var arDebug = new THREE.ARDebug(vrDisplay);
+        // document.body.appendChild(arDebug.getElement());
+
+        // Setup the three.js rendering environment
+        renderer = new THREE.WebGLRenderer({
+          alpha: true,
+          antialias: true
+        });
+
+        renderer.setPixelRatio(window.devicePixelRatio);
+        console.log('setRenderer size', window.innerWidth, window.innerHeight);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.autoClear = false;
+        canvas = renderer.domElement;
+        document.body.appendChild(canvas);
+        scene = new THREE.Scene();
+        arView = new THREE.ARView(vrDisplay, renderer);
+        camera = new THREE.ARPerspectiveCamera(
+          vrDisplay,
+          60,
+          window.innerWidth / window.innerHeight,
+          vrDisplay.depthNear,
+          vrDisplay.depthFar
+        );
+
+        vrControls = new THREE.VRControls(camera);
+
+        // Bind our event handlers
+        window.addEventListener('resize', onWindowResize, false);
+        // canvas.addEventListener('touchstart', onClick, false);
+
+        // Kick off the render loop!
+        update();
+      }
+
+      function update() {
+        renderer.clearColor();
+        arView.render();
+        camera.updateProjectionMatrix();
+        vrDisplay.getFrameData(vrFrameData);
+        vrControls.update();
+        renderer.clearDepth();
+        renderer.render(scene, camera);
+        vrDisplay.requestAnimationFrame(update);
+
+        if (textMesh1) {
+          textMesh1.rotation.y += (targetRotationX - textMesh1.rotation.y) * 0.5;
+          textMesh1.rotation.x += (targetRotationY - textMesh1.rotation.x) * 0.5;
+          textMesh1.scale.x = newScale
+          textMesh1.scale.y = newScale
+          textMesh1.scale.z = newScale
+        }
+      }
+
+
+      function onWindowResize() {
+        console.log('setRenderer size', window.innerWidth, window.innerHeight);
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      function getPhrase() {
+        $("#firstChoice").children().not("#firstChoiceIntro").remove();
+        $("#secondChoice").children().not("#secondChoiceIntro").remove();
+        $("#selectedPhraseTemp").empty();
+
+        document.getElementById("phraseWrapper").style.display = "block"
+
+        d3.csv("Thesis_NY_Lyrics.csv", function(rawData) {
+          var rawDataByPhrase = [];
+
+          for (var i = 0; i < rawData.length; i++) {
+            var artist = rawData[i].artist.toUpperCase();
+            var song = rawData[i].song.toUpperCase();
+            var lyrics = rawData[i].lyrics.split("\n");
+            for (var j = 0; j < lyrics.length; j++) {
+              rawDataByPhrase.push({
+                artist: artist,
+                song: song,
+                phrase: lyrics[j]
+              })
+            }
+          }
+
+          var bodyText = [];
+          rawData.forEach(function(d) {
+            var lyrics = d.lyrics;
+            bodyText.push(lyrics)
+          })
+
+          bodyText = bodyText.join(" ")
+
+          generateFirstToken(bodyText);
+
+          function generateFirstToken(texts) {
+            var markovFT = new RiMarkov(3);
+            markovFT.loadText(texts)
+            var tokens = markovFT.generateTokens(1000);
+
+            var counts = {};
+            tokens.forEach(function(x) {
+              counts[x.toLowerCase()] = (counts[x.toLowerCase()] || 0) + 1;
+            });
+
+            var verbToken = [];
+            var keys = Object.keys(counts);
+            keys.forEach(function(d) {
+              // if (RiTa.getPosTags(d) == "vb" || RiTa.getPosTags(d) == "vbd" || RiTa.getPosTags(d) == "vbg" || RiTa.getPosTags(d) == "vbn" || RiTa.getPosTags(d) == "vbp" || RiTa.getPosTags(d) == "vbz"
+              // || RiTa.getPosTags(d) == "nn" || RiTa.getPosTags(d) == "nns" || RiTa.getPosTags(d) == "nnp" || RiTa.getPosTags(d) == "nnps") {
+              if (RiTa.getPosTags(d) == "nn" || RiTa.getPosTags(d) == "nns" || RiTa.getPosTags(d) == "nnp" || RiTa.getPosTags(d) == "nnps") {
+                verbToken.push({
+                  token: d,
+                  count: counts[d]
+                })
+              }
+            })
+
+            verbToken.sort(function(a, b) {
+              return b.count - a.count;
+            })
+
+            console.log(verbToken)
+
+            var filteredData = [];
+            var filteredBodyText = [];
+
+            var firstChoice = d3.select("#firstChoice");
+
+            firstChoice.selectAll("firstToken")
+              .data(verbToken)
+              .enter().append("option")
+              .attr("class", "firstToken")
+              .attr("value", function(d) {
+                return d.token;
+              })
+              .text(function(d) {
+                return d.token;
+              })
+
+            firstChoice.on('change', function() {
+              filteredData = [];
+              filteredBodyText = [];
+              d3.selectAll(".secondToken").remove();
+
+              firstChoiceWord = firstChoice.property('value')
+              rawDataByPhrase.forEach(function(d) {
+                var regex = new RegExp('\\b' + firstChoiceWord + '\\b');
+                if (d.phrase.search(regex) != -1) {
+                  filteredData.push(d)
+                  filteredBodyText.push(d.phrase);
+                }
+              })
+              filteredBodyText = filteredBodyText.join(" ")
+              generateSecondToken(filteredData, filteredBodyText);
+            })
+          }
+
+          function generateSecondToken(filteredData, texts) {
+            console.log(filteredData)
+
+            var markovST = new RiMarkov(3);
+            markovST.loadText(texts)
+            var tokens = markovST.generateTokens(1000);
+
+            var counts = {};
+            if (tokens.length > 1) {
+              tokens.forEach(function(x) {
+                counts[x.toLowerCase()] = (counts[x.toLowerCase()] || 0) + 1;
+              });
+
+              var secondToken = [];
+              var keys = Object.keys(counts);
+              keys.forEach(function(d) {
+                if (RiTa.getPosTags(d) == "vb" || RiTa.getPosTags(d) == "vbd" || RiTa.getPosTags(d) == "vbg" || RiTa.getPosTags(d) == "vbn" || RiTa.getPosTags(d) == "vbp" || RiTa.getPosTags(d) == "vbz") {
+                  secondToken.push({
+                    token: d,
+                    count: counts[d]
+                  })
+                }
+              })
+
+              secondToken.sort(function(a, b) {
+                return b.count - a.count;
+              })
+
+              console.log(secondToken)
+
+              var finalData = [];
+              var secondChoice = d3.select("#secondChoice");
+
+              secondChoice.selectAll("secondToken")
+                .data(secondToken)
+                .enter().append("option")
+                .attr("class", "secondToken")
+                .attr("value", function(d) {
+                  return d.token;
+                })
+                .text(function(d) {
+                  return d.token;
+                })
+
+              secondChoice.on('change', function() {
+                finalData = [];
+                secondChoiceWord = secondChoice.property('value')
+                filteredData.forEach(function(d) {
+                  var regex = new RegExp('\\b' + secondChoiceWord + '\\b');
+                  if (d.phrase.search(regex) != -1) {
+                    finalData.push(d)
+                  }
+                })
+                // console.log(finalData)
+                finalSelectedData = finalData[finalData.length - 1];
+                var finalPhrase = finalSelectedData.phrase
+
+                document.getElementById("selectedPhraseTemp").innerHTML = finalPhrase;
+                text = '';
+                finalPhrase = finalPhrase.split(" ")
+                for (var i = 0; i < finalPhrase.length; i++) {
+                  if ((i + 1) % 4 == 0) text += '\n';
+                  text += " " + finalPhrase[i];
+                }
+                console.log(text)
+              })
+            } else {
+              finalData = filteredData;
+              // console.log(finalData)
+              finalSelectedData = finalData[finalData.length - 1];
+              var finalPhrase = finalSelectedData.phrase
+              document.getElementById("selectedPhraseTemp").innerHTML = finalPhrase;
+              text = '';
+              finalPhrase = finalPhrase.split(" ")
+              for (var i = 0; i < finalPhrase.length; i++) {
+                if ((i + 1) % 4 == 0) text += '\n';
+                text += " " + finalPhrase[i];
+              }
+              console.log(text)
+            }
+
+            // Line break for the selected phrase
+            // var textTemp = text.split(" ");
+            // if (textTemp.length > 3 && textTemp.length <= 6) {
+            //   textTemp.splice(3, 0, '\n')
+            //   text = textTemp.join(" ")
+            //   text = " " + text;
+            // } else if (textTemp.length > 6 && textTemp.length <= 9) {
+            //   textTemp.splice(3, 0, '\n')
+            //   textTemp.splice(7, 0, '\n')
+            //   text = textTemp.join(" ")
+            //   text = " " + text;
+            // } else if (textTemp.length > 9 && textTemp.length <= 12) {
+            //   textTemp.splice(3, 0, '\n')
+            //   textTemp.splice(7, 0, '\n')
+            //   textTemp.splice(11, 0, '\n')
+            //   text = textTemp.join(" ")
+            //   text = " " + text;
+            // }
+          }
+        })
+      }
+
+      function initText() {
+        document.getElementById("phraseWrapper").style.display = "none"
+
+        // Reset
+        // if (dirLight != undefined) scene.remove(dirLight);
+        // if (dirLight2 != undefined) scene.remove(dirLight2);
+        if (ambientLight != undefined) scene.remove(ambientLight);
+        if (textMesh1 != undefined) scene.remove(textMesh1);
+
+        // Create light
+        ambientLight = new THREE.AmbientLight(0xffffff, 1); // soft white light
+        scene.add(ambientLight);
+
+        // materials = [
+        //   new THREE.MeshPhongMaterial({
+        //     flatShading: true,
+        //     opacity: 1,
+        //     transparent: true
+        //   }), // front
+        //   new THREE.MeshPhongMaterial({
+        //     flatShading: true,
+        //     opacity: 0.25,
+        //     transparent: true
+        //   }) // side
+        // ];
+
+        materials =
+          new THREE.MeshPhongMaterial({
+            flatShading: true,
+            opacity: 1,
+            transparent: true
+          })
+
+        materials.color.setHSL(Math.random(), 1, 1)
+
+        // materials[0].color.setHSL(Math.random(), 1, 1)
+        // materials[1].color.setHSL(Math.random(), 0, 0.1)
+
+        var loader = new THREE.FontLoader();
+        loader.load('font/' + fontName + '.typeface.json', function(response) {
+          font = response;
+          console.log(font);
+          console.log(text);
+          if (!text) return;
+          createText();
+        });
+      }
+
+      function createText() {
+        textGeo = new THREE.TextGeometry(text, {
+          font: font,
+          size: size,
+          height: height,
+          curveSegments: curveSegments,
+          bevelThickness: bevelThickness,
+          bevelSize: bevelSize,
+          bevelEnabled: bevelEnabled
+        });
+        textGeo.center();
+        textMesh1 = new THREE.Mesh(textGeo, materials);
+
+        showText();
+      }
+
+      // When clicking on the screen, create a text at the user's screen
+      function showText() {
+        var pose = vrFrameData.pose;
+        var ori = new THREE.Quaternion(
+          pose.orientation[0],
+          pose.orientation[1],
+          pose.orientation[2],
+          pose.orientation[3]
+        );
+        var pos = new THREE.Vector3(
+          pose.position[0],
+          pose.position[1],
+          pose.position[2]
+        );
+
+        var dirMtx = new THREE.Matrix4();
+        dirMtx.makeRotationFromQuaternion(ori);
+
+        var push = new THREE.Vector3(0, 0, -1.0);
+        var initScale = new THREE.Vector3(0.5, 0.5, 0.5);
+
+        push.transformDirection(dirMtx);
+        pos.addScaledVector(push, 0.125);
+
+        scene.add(textMesh1);
+        textMesh1.position.copy(pos);
+        textMesh1.scale.copy(initScale);
+        textMesh1.quaternion.copy(ori);
+      }
+
+
+      var targetRotationX = 0;
+      var targetRotationOnMouseDownX = 0;
+      var targetRotationY = 0;
+      var targetRotationOnMouseDownY = 0;
+      var mouseX = 0;
+      var mouseY = 0;
+      var mouseXOnMouseDown = 0;
+      var mouseYOnMouseDown = 0;
+      var windowHalfX = window.innerWidth / 2;
+      var windowHalfY = window.innerHeight / 2;
+      var newScale = 1;
+      var lastScale = 1;
+      var hammertime = new Hammer(document, {
+        domEvents: true
+      });
+
+      hammertime.get('pinch').set({
+        enable: true
+      });
+
+      hammertime.on('pinch', function(e) {
+        newScale = Math.max(.1, Math.min(lastScale * (e.scale), 10));
+      });
+
+      hammertime.on("pinchend", function(e) {
+        lastScale = newScale;
+      });
+
+      document.addEventListener('touchstart', onDocumentTouchStart, false);
+      document.addEventListener('touchmove', onDocumentTouchMove, false);
+      document.getElementById("keywordButton").addEventListener('click', getPhrase);
+      document.getElementById("getPhraseButton").addEventListener('click', initText);
+
+      document.getElementById("colorButton").addEventListener('click', function() {
+        // materials[0].color.setHSL(Math.random(), 1, 1)
+        // materials[0].color.setHSL(Math.random(), 0.4, 0.5)
+        materials.color.setHSL(Math.random(), 0.35, 0.5)
+
+      }, false);
+      document.getElementById("saveButton").addEventListener('click', getAllData, false);
+      document.getElementById("changeFont").addEventListener('click', function() {
+        fontIndex++;
+        fontName = reverseFontMap[fontIndex % reverseFontMap.length];
+        initText();
+      }, false);
+
+      function getAllData() {
+
+        var saveData = {};
+        var time, lat, lon;
+
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(function(position) {
+
+            // location = position.coords;
+
+            lat = position.coords.latitude;
+            lon = position.coords.longitude;
+            time = Date.now();
+
+            d3.json("https://api.openweathermap.org/data/2.5/weather?lat=" + lat + "&lon=" + lon + "&APPID=ac0de2ff248984179b5273a5618e0f51", function(weather) {
+
+              if (secondChoiceWord == undefined) {
+                secondChoiceWord = "no second choice";
+              } else {
+                secondChoiceWord = secondChoiceWord;
+              }
+
+              saveData = {
+                lyrics: finalSelectedData,
+                selectedWord: {
+                  first: firstChoiceWord,
+                  second: secondChoiceWord
+                },
+                weatherInfo: weather,
+                locationInfo: {
+                  lat: lat,
+                  lon: lon
+                },
+                timeInfo: time
+              }
+
+              console.log(saveData)
+
+              // Save to Firebase
+              firebase.database().ref('improviser/' + time).set(saveData);
+
+              // var dataURL = canvas.toDataURL('image/jpeg');
+              // var ref = firebase.storage().ref('test').child(time+".jpg");
+              // ref.putString(dataURL, 'data_url').then(function(snapshot) {
+              //   console.log('Uploaded a data_url string!');
+              // });
+
+              alert("Saved!");
+            });
+
+          });
+        } else {
+          alert("Your browser does not support Geolocation.");
+        }
+
+      }
+
+
+      function onDocumentTouchStart(event) {
+        if (event.touches.length == 1) {
+          // event.preventDefault();
+          mouseXOnMouseDown = event.touches[0].pageX - windowHalfX;
+          mouseYOnMouseDown = event.touches[0].pageY - windowHalfY;
+          targetRotationOnMouseDownX = targetRotationX;
+          targetRotationOnMouseDownY = targetRotationY;
+        }
+      }
+
+      function onDocumentTouchMove(event) {
+        if (event.touches.length == 1) {
+          // event.preventDefault();
+          mouseX = event.touches[0].pageX - windowHalfX;
+          targetRotationX = targetRotationOnMouseDownX + (mouseX - mouseXOnMouseDown) * 0.0025;
+          mouseY = event.touches[0].pageY - windowHalfY;
+          targetRotationY = targetRotationOnMouseDownY + (mouseY - mouseYOnMouseDown) * 0.0025;
+        }
+      }
+    </script>
+</body>
+
+</html>

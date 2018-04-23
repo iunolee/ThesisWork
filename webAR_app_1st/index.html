@@ -11,7 +11,7 @@
   <script src="dist/three.ar.js"></script>
   <script src="https://hammerjs.github.io/dist/hammer.js"></script>
   <script src="//d3js.org/d3.v4.min.js"></script>
-
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
   <style>
     body {
       margin: 0;
@@ -140,28 +140,17 @@
       var group, textMesh1, textGeo, materials;
       var text;
       var size = 0.01,
-        height = size * 0.3,
-        hover = 0,
-        curveSegments = 12,
-        bevelThickness = size * 0.1,
-        bevelSize = size * 0.02,
+        height = size * 0.0,
+        curveSegments = 2,
+        bevelThickness = size * 0.0,
+        bevelSize = size * 0.03,
         bevelSegments = 0,
         bevelEnabled = true,
         font = undefined,
-        fontName = "Baskerville_Bold";
-
-      // var fontMap = {
-      //   "helvetiker_bold": 0,
-      //   "helvetiker_regular": 1,
-      //   "Bebas_regular": 2,
-      //   "Libertine_bold": 3,
-      //   "Roboto_black": 4,
-      //   "JennaSue_regular": 5
-      // };
+        fontName = "chunkFiveRegular";
 
 
       var reverseFontMap = [];
-      // for (var i in fontMap) reverseFontMap[fontMap[i]] = i;
       var targetRotation = 0;
       var targetRotationOnMouseDown = 0;
       var targetYpos = 0;
@@ -174,9 +163,8 @@
       var fontIndex = 1;
 
 
-      var pointLight;
       var dirLight;
-
+      var dirLight2;
 
       THREE.ARUtils.getARDisplay().then(function(display) {
         if (display) {
@@ -263,17 +251,25 @@
         matchedPhrases = [];
 
         var keywordValue = document.getElementById("keywordInput").value;
+
         // console.log(keywordValue)
         rawData.forEach(function(d) {
-          if (d.lyric.indexOf(keywordValue) != -1) {
+          let lyric = d.lyric.toLowerCase();
+          let lyricss = lyric.split(" ");
+          if (lyricss.indexOf(keywordValue.toLowerCase()) != -1) {
             matchedPhrases.push(d)
           } else {
             // console.log("no result")
           }
         })
 
-        selectedPhrase = matchedPhrases[Math.floor(Math.random() * matchedPhrases.length)]
-        text = selectedPhrase.lyric;
+        if (matchedPhrases.length > 0) {
+          selectedPhrase = matchedPhrases[Math.floor(Math.random() * matchedPhrases.length)]
+          text = selectedPhrase.lyric;
+        } else {
+          text = "Sorry! Try another?"
+        }
+
         // text = text.replace(/^((\S+\s+){2}\S+)\s+/, '$1\n');
         var textTemp = text.split(" ");
         if (textTemp.length > 3 && textTemp.length <= 6) {
@@ -299,24 +295,31 @@
       function initText() {
 
         //reset
-        if (pointLight != undefined) scene.remove(pointLight);
         if (dirLight != undefined) scene.remove(dirLight);
+        if (dirLight2 != undefined) scene.remove(dirLight2);
         if (textMesh1 != undefined) scene.remove(textMesh1);
 
-        // create text
+        // create light
 
-        dirLight = new THREE.DirectionalLight(0xffffff, 0.125);
-        dirLight.position.set(0, 0, 1).normalize();
+        dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(0, 1, 2).normalize();
+
+        dirLight2 = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(0, -1, 2).normalize();
+
         scene.add(dirLight);
+        scene.add(dirLight2);
 
-        pointLight = new THREE.PointLight(0xffffff, 1);
-        pointLight.position.set(0, 100, 90);
-        scene.add(pointLight);
+
+
+        // pointLight = new THREE.PointLight(0xffffff, 1);
+        // pointLight.position.set(0, 100, 90);
+        // scene.add(pointLight);
 
         materials = [
           new THREE.MeshPhongMaterial({
             flatShading: true,
-            opacity: 0,
+            opacity: 0.0,
             transparent: true
           }), // front
           new THREE.MeshPhongMaterial({
@@ -326,7 +329,7 @@
           }) // side
         ];
         materials[0].color.setHSL(Math.random(), 1, 1)
-        materials[1].color.setHSL(Math.random(), 0.7, 0.7)
+        materials[1].color.setHSL(Math.random(), 0, 0.25)
 
         var loader = new THREE.FontLoader();
         loader.load('font/' + fontName + '.typeface.json', function(response) {
@@ -337,6 +340,7 @@
       }
 
       function createText() {
+        console.log("hi")
         textGeo = new THREE.TextGeometry(text, {
           font: font,
           size: size,
@@ -347,8 +351,8 @@
           bevelEnabled: bevelEnabled
         });
         textGeo.center();
-        textGeo.computeBoundingBox();
-        textGeo.computeVertexNormals();
+        // textGeo.computeBoundingBox();
+        // textGeo.computeVertexNormals();
         //
         // if (!bevelEnabled) {
         //   var triangleAreaHeuristics = 0.1 * (height * size);
@@ -385,6 +389,9 @@
       // When clicking on the screen, create a text at the user's screen
       function showText() {
 
+        console.log("hi")
+
+
         var pose = vrFrameData.pose;
         var ori = new THREE.Quaternion(
           pose.orientation[0],
@@ -398,6 +405,12 @@
           pose.position[2]
         );
 
+        console.log(pos);
+
+        // pos.normalize();
+
+        // console.log(pos);
+
         var dirMtx = new THREE.Matrix4();
         dirMtx.makeRotationFromQuaternion(ori);
 
@@ -407,6 +420,8 @@
         push.transformDirection(dirMtx);
         pos.addScaledVector(push, 0.125);
 
+        console.log(pos);
+
         // console.log(pos)
         // var centerOffset = -0.5 * (textGeo.boundingBox.max.x - textGeo.boundingBox.min.x);
 
@@ -414,6 +429,7 @@
         textMesh1.position.copy(pos);
         textMesh1.scale.copy(initScale);
         textMesh1.quaternion.copy(ori);
+
       }
 
 
@@ -451,7 +467,7 @@
 
       document.getElementById("colorButton").addEventListener('click', function() {
         materials[0].color.setHSL(Math.random(), 1, 1)
-        materials[1].color.setHSL(Math.random(), 0.7, 0.7)
+        materials[1].color.setHSL(Math.random(), 0.4, 0.5)
       }, false);
 
       document.getElementById("saveButton").addEventListener('click', getAllData, false);
@@ -460,29 +476,39 @@
 
         var finalData = {};
         var date, now, location;
+        var weather;
 
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(function(position) {
-            // console.log(position.coords);
-            location = position.coords;
+        $.post("https://www.googleapis.com/geolocation/v1/geolocate?key=AIzaSyANNXCX3qWs_hIaP8OU-JIpXYPBHYUQYzE", function(position) {
+
+            location = position.location;
+            var lat = location.lat;
+            var lon = location.lng;
+
+            d3.json("http://api.openweathermap.org/data/2.5/weather?lat=" + lat + "&lon=" + lon + "&APPID=ac0de2ff248984179b5273a5618e0f51", function(data) {
+              weather = data;
+            });
+
             date = new Date();
             now = Date.now();
+
             finalData = {
               phrase: text,
               phraseInfo: selectedPhrase,
-              // weatherInfo : weatherInfo,
+              weatherInfo: weather,
               locationInfo: location,
               timeInfo: {
                 date: date,
                 dateMS: now
               }
             }
+
             console.log(finalData)
+          })
+          .fail(function(err) {
+            alert("API Geolocation error! \n\n" + err);
           });
-        } else {
-          console.log("Geolocation is not supported by this browser.");
-        }
       }
+
 
       function onDocumentTouchStart(event) {
         if (event.touches.length == 1) {
